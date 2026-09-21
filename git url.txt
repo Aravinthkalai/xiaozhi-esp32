@@ -1,0 +1,5 @@
+C:\Users\aravi\Desktop\esp\xiaozhi-esp32>git remote -v
+origin  https://github.com/78/xiaozhi-esp32.git (fetch)
+origin  https://github.com/78/xiaozhi-esp32.git (push)
+
+C:\Users\aravi\Desktop\esp\xiaozhi-esp32>
