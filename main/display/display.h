@@ -4,7 +4,7 @@
 #include "emoji_collection.h"
 #include "text_glyph.h"
 
-#if !defined(CONFIG_USE_EMOTE_MESSAGE_STYLE) && !defined(CONFIG_BOARD_TYPE_ESP32S3_SUPERMINI)
+#if !defined(CONFIG_USE_EMOTE_MESSAGE_STYLE)
 #define HAVE_LVGL 1
 #include <lvgl.h>
 #endif

@@ -202,10 +202,11 @@ NetworkResult<> Ota::CheckVersion() {
             double ts = timestamp->valuedouble;
             
             // 如果有时区偏移，计算本地时间
-            if (cJSON_IsNumber(timezone_offset)) {
-                ts += (timezone_offset->valueint * 60 * 1000); // 转换分钟为毫秒
-            }
-            
+        if (cJSON_IsNumber(timezone_offset)) {
+         //   ESP_LOGI(TAG, "Server timezone_offset = %d minutes, using IST +330", timezone_offset->valueint);
+            ts += (330 * 60 * 1000);
+        }
+                        
             tv.tv_sec = (time_t)(ts / 1000);  // 转换毫秒为秒
             tv.tv_usec = (suseconds_t)((long long)ts % 1000) * 1000;  // 剩余的毫秒转换为微秒
             settimeofday(&tv, NULL);

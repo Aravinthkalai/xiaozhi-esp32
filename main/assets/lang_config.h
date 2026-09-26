@@ -23,7 +23,7 @@ namespace Lang {
         constexpr const char* CHECKING_NEW_VERSION = "检查新版本...";
         constexpr const char* CHECK_NEW_VERSION_FAILED = "检查新版本失败，将在 %d 秒后重试：%s";
         constexpr const char* CONNECTED_TO = "已连接 ";
-        constexpr const char* CONNECTING = "连接中...";
+        constexpr const char* CONNECTING = "Connecting...";
         constexpr const char* CONNECTION_SUCCESSFUL = "连接成功";
         constexpr const char* CONNECT_TO = "连接 ";
         constexpr const char* CONNECT_TO_HOTSPOT = "手机连接热点 ";
@@ -37,7 +37,7 @@ namespace Lang {
         constexpr const char* HELLO_MY_FRIEND = "你好，我的朋友！";
         constexpr const char* INFO = "信息";
         constexpr const char* INITIALIZING = "正在初始化...";
-        constexpr const char* LISTENING = "聆听中...";
+        constexpr const char* LISTENING = "Listening...";
         constexpr const char* LOADING_ASSETS = "加载资源...";
         constexpr const char* LOADING_PROTOCOL = "登录服务器...";
         constexpr const char* MAX_VOLUME = "最大音量";
@@ -56,8 +56,8 @@ namespace Lang {
         constexpr const char* SERVER_NOT_CONNECTED = "无法连接服务，请稍后再试";
         constexpr const char* SERVER_NOT_FOUND = "正在寻找可用服务";
         constexpr const char* SERVER_TIMEOUT = "等待响应超时";
-        constexpr const char* SPEAKING = "说话中...";
-        constexpr const char* STANDBY = "待命";
+        constexpr const char* SPEAKING = "Speaking...";
+        constexpr const char* STANDBY = "Standby";
         constexpr const char* SWITCH_TO_4G_NETWORK = "切换到 4G...";
         constexpr const char* SWITCH_TO_WIFI_NETWORK = "切换到 Wi-Fi...";
         constexpr const char* UPGRADE_FAILED = "升级失败";

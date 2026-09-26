@@ -18,8 +18,14 @@
 #include <cJSON.h>
 #include <cstring>
 #include <limits>
+#include <algorithm>
+#include <cctype>
 
 #define TAG "Application"
+
+// When true, the current conversation is intentionally being put to sleep.
+// This is cleared when a new conversation is started by BOOT or the wake word.
+static bool g_sleep_requested = false;
 
 Application::Application() : notify_player_(audio_service_) {
     event_group_ = xEventGroupCreate();
@@ -336,10 +342,16 @@ void Application::HandleActivationDoneEvent() {
     SystemInfo::PrintHeapStats();
     SetDeviceState(kDeviceStateIdle);
 
+    // Stay in Idle after activation. Wake-word detection is enabled by the
+    // Idle state handler; do not open an audio session automatically.
+    // Opening a silent session immediately after activation can cause the
+    // server to send goodbye, while the AFE is still feeding microphone data.
+    g_sleep_requested = false;
+
     has_server_time_ = ota_->HasServerTime();
 
     // Protocol start may have already raised MAIN_EVENT_ERROR. Do not replace
-    // that alert with the "ready" UI/sound — the main loop can process both
+    // that alert with the "ready" UI/sound â€” the main loop can process both
     // events back-to-back because the activation task is lower priority.
     const bool has_error = !last_error_message_.empty();
     if (!has_error) {
@@ -572,6 +584,8 @@ void Application::InitializeProtocol() {
         Schedule([this]() {
             auto display = Board::GetInstance().GetDisplay();
             display->SetChatMessage("system", "");
+            // A closed channel means the current conversation is over.
+            // Do not force a reconnect here. Idle enables the wake-word path.
             SetDeviceState(kDeviceStateIdle);
         });
     });
@@ -623,16 +637,32 @@ void Application::InitializeProtocol() {
             }
             if (strcmp(state->valuestring, "start") == 0) {
                 Schedule([this]() {
+                    // Do not enter Speaking after a sleep command. The user
+                    // explicitly asked the device to go idle.
+                    if (g_sleep_requested) {
+                        if (protocol_ && protocol_->IsAudioChannelOpened()) {
+                            protocol_->SendStopListening();
+                            protocol_->CloseAudioChannel();
+                        }
+                        SetDeviceState(kDeviceStateIdle);
+                        return;
+                    }
                     aborted_ = false;
                     SetDeviceState(kDeviceStateSpeaking);
                 });
             } else if (strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     if (GetDeviceState() == kDeviceStateSpeaking) {
-                        if (listening_mode_ == kListeningModeManualStop) {
+                        if (g_sleep_requested) {
+                            if (protocol_ && protocol_->IsAudioChannelOpened()) {
+                                protocol_->SendStopListening();
+                                protocol_->CloseAudioChannel();
+                            }
                             SetDeviceState(kDeviceStateIdle);
+                            g_sleep_requested = false;
                         } else {
-                            SetDeviceState(kDeviceStateListening);
+                            // Normal conversation: immediately listen again.
+                            SetListeningMode(kListeningModeRealtime);
                         }
                     }
                 });
@@ -661,10 +691,31 @@ void Application::InitializeProtocol() {
                     glyphs.clear();
                 }
                 ESP_LOGI(TAG, ">> %s", text->valuestring);
-                Schedule([display, message = std::string(text->valuestring),
-                          glyphs = std::move(glyphs), bpp]() {
+
+                // Treat an explicit sleep request as a local device command.
+                // This avoids relying on an LLM/MCP tool to put the ESP32 to sleep.
+                std::string command = text->valuestring;
+                std::transform(command.begin(), command.end(), command.begin(),
+                               [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                const bool sleep_request =
+                    command.find("go to sleep") != std::string::npos ||
+                    command.find("go sleep") != std::string::npos ||
+                    command == "sleep" ||
+                    command.find("good night") != std::string::npos ||
+                    command.find("go to idle") != std::string::npos;
+
+                Schedule([this, display, message = std::string(text->valuestring),
+                          glyphs = std::move(glyphs), bpp, sleep_request]() {
                     display->AddTextGlyphs(glyphs, bpp);
                     display->SetChatMessage("user", message.c_str());
+
+                    if (sleep_request) {
+                        ESP_LOGI(TAG, "Sleep command detected: %s", message.c_str());
+                        g_sleep_requested = true;
+                        if (GetDeviceState() == kDeviceStateListening && protocol_) {
+                            protocol_->SendStopListening();
+                        }
+                    }
                 });
             }
         } else if (strcmp(type->valuestring, "llm") == 0) {
@@ -804,7 +855,8 @@ void Application::HandleToggleChatEvent() {
     }
 
     if (state == kDeviceStateIdle) {
-        ListeningMode mode = GetDefaultListeningMode();
+        g_sleep_requested = false;
+        ListeningMode mode = kListeningModeRealtime;
         if (!protocol_->IsAudioChannelOpened()) {
             SetDeviceState(kDeviceStateConnecting);
             // Schedule to let the state change be processed first (UI update)
@@ -815,7 +867,13 @@ void Application::HandleToggleChatEvent() {
     } else if (state == kDeviceStateSpeaking) {
         AbortSpeaking(kAbortReasonNone);
     } else if (state == kDeviceStateListening) {
-        protocol_->CloseAudioChannel();
+        // BOOT explicitly stops the current conversation.
+        g_sleep_requested = true;
+        if (protocol_) {
+            protocol_->SendStopListening();
+            protocol_->CloseAudioChannel();
+        }
+        SetDeviceState(kDeviceStateIdle);
     }
 }
 
@@ -864,16 +922,20 @@ void Application::HandleStartListeningEvent() {
     }
 
     if (state == kDeviceStateIdle) {
+        g_sleep_requested = false;
+        ListeningMode mode = kListeningModeRealtime;
+
         if (!protocol_->IsAudioChannelOpened()) {
             SetDeviceState(kDeviceStateConnecting);
             // Schedule to let the state change be processed first (UI update)
-            Schedule([this]() { ContinueOpenAudioChannel(kListeningModeManualStop); });
+            Schedule([this, mode]() { ContinueOpenAudioChannel(mode); });
             return;
         }
-        SetListeningMode(kListeningModeManualStop);
+
+        SetListeningMode(mode);
     } else if (state == kDeviceStateSpeaking) {
         AbortSpeaking(kAbortReasonNone);
-        SetListeningMode(kListeningModeManualStop);
+        SetListeningMode(kListeningModeRealtime);
     }
 }
 
@@ -915,7 +977,7 @@ void Application::HandleWakeWordDetectedEvent() {
             ;
 
         if (state == kDeviceStateListening) {
-            protocol_->SendStartListening(GetDefaultListeningMode());
+            protocol_->SendStartListening(kListeningModeRealtime);
             audio_service_.ResetDecoder();
             audio_service_.PlaySound(Lang::Sounds::OGG_POPUP);
             // Re-enable wake word detection as it was stopped by the detection itself
@@ -923,7 +985,7 @@ void Application::HandleWakeWordDetectedEvent() {
         } else {
             // Play popup sound and start listening again
             play_popup_on_listening_ = true;
-            SetListeningMode(GetDefaultListeningMode());
+            SetListeningMode(kListeningModeRealtime);
         }
     } else if (state == kDeviceStateActivating) {
         // Restart the activation check if the wake word is detected during activation
@@ -932,6 +994,7 @@ void Application::HandleWakeWordDetectedEvent() {
 }
 
 void Application::BeginWakeWordInvoke(const std::string& wake_word) {
+    g_sleep_requested = false;
     // Must run in the main task with the device in idle state
     audio_service_.EncodeWakeWord();
 
@@ -983,12 +1046,12 @@ void Application::ContinueWakeWordInvoke(const std::string& wake_word) {
     }
     // Set the chat state to wake word detected
     protocol_->SendWakeWordDetected(wake_word);
-    SetListeningMode(GetDefaultListeningMode());
+    SetListeningMode(kListeningModeRealtime);
 #else
     // Set flag to play popup sound after state changes to listening
     // (PlaySound here would be cleared by ResetDecoder in EnableVoiceProcessing)
     play_popup_on_listening_ = true;
-    SetListeningMode(GetDefaultListeningMode());
+    SetListeningMode(kListeningModeRealtime);
 #endif
 }
 
@@ -1186,7 +1249,9 @@ void Application::SetListeningMode(ListeningMode mode) {
 }
 
 ListeningMode Application::GetDefaultListeningMode() const {
-    return aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime;
+    // Use realtime mode for this device so a quiet period does not end the
+    // conversation. Explicit "go to sleep" / BOOT still returns to Idle.
+    return kListeningModeRealtime;
 }
 
 void Application::Reboot() {
