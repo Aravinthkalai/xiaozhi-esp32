@@ -324,32 +324,16 @@ Write-Host "`nDependencies:" -ForegroundColor Cyan
 Write-Host "  Resolved from main\idf_component.yml"
 Write-Host "  managed_components generated automatically"
 
-Write-Host "`nNext commands:" -ForegroundColor Cyan
+Write-Host "`nClean first-time flash:" -ForegroundColor Cyan
 Write-Host "  cd `"$XiaoZhiDir`""
 Write-Host '  python scripts\build.py esp32s3-supermini'
+Write-Host '  idf.py -p COM8 erase-flash'
 Write-Host '  idf.py -p COM8 flash'
 Write-Host '  idf.py -p COM8 monitor'
-
-Write-Host "`nNote: COM8 may be different on another PC." -ForegroundColor DarkYellow
-
-
 Write-Host ""
-Write-Host "============================================================"
-Write-Host " CLEAN BUILD AND FLASH"
-Write-Host "============================================================"
-Write-Host ""
-Write-Host "After setup, use the following commands for a clean first flash:"
-Write-Host ""
-Write-Host "  cd xiaozhi-esp32"
-Write-Host "  python scripts\build.py esp32s3-supermini"
-Write-Host "  idf.py -p COM8 erase-flash"
-Write-Host "  idf.py -p COM8 flash"
-Write-Host "  idf.py -p COM8 monitor"
-Write-Host ""
-Write-Host "IMPORTANT:"
+Write-Host "IMPORTANT:" -ForegroundColor Yellow
 Write-Host "  erase-flash erases the ENTIRE ESP32-S3 flash."
-Write-Host "  This is recommended for the first installation or when"
-Write-Host "  changing partition tables/assets."
+Write-Host "  Use it for the first installation or when changing"
+Write-Host "  the partition table or stored assets."
+Write-Host "  For normal firmware updates, erase-flash is not required."
 Write-Host "  Replace COM8 with the actual ESP32-S3 port."
-Write-Host ""
-
