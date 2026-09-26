@@ -12,6 +12,8 @@
 #   - clones the custom repository
 #   - replaces upstream main/ with custom main/
 #   - activates ESP-IDF 6.1
+#   - resolves ESP-IDF Component Manager dependencies from main/idf_component.yml
+#   - verifies that managed_components/ is generated
 #
 # If PowerShell blocks this script, run:
 #   Set-ExecutionPolicy -Scope Process Bypass
@@ -240,9 +242,58 @@ foreach ($file in $RequiredFiles) {
 }
 
 # ---------------------------------------------------------------------------
-# 6. Finish
+# 6. Resolve ESP-IDF Component Manager dependencies
 # ---------------------------------------------------------------------------
-Write-Host "`n[6/6] Setup verification..." -ForegroundColor Yellow
+Write-Host "`n[6/7] Resolving ESP-IDF dependencies..." -ForegroundColor Yellow
+
+$ManifestFile = Join-Path $TargetMain "idf_component.yml"
+
+if (-not (Test-Path $ManifestFile)) {
+    throw "Dependency manifest is missing: $ManifestFile"
+}
+
+Write-Host "Found dependency manifest:" -ForegroundColor Green
+Write-Host "  $ManifestFile"
+
+Write-Host "Running ESP-IDF configuration to resolve dependencies..." -ForegroundColor Yellow
+Push-Location $XiaoZhiDir
+try {
+    # Component Manager reads main/idf_component.yml and creates/updates
+    # managed_components automatically. Do not copy or commit managed_components.
+    idf.py reconfigure
+    if ($LASTEXITCODE -ne 0) {
+        throw "ESP-IDF dependency resolution failed during 'idf.py reconfigure'."
+    }
+}
+finally {
+    Pop-Location
+}
+
+$ManagedComponentsDir = Join-Path $XiaoZhiDir "managed_components"
+
+if (-not (Test-Path $ManagedComponentsDir)) {
+    throw "ESP-IDF did not create managed_components: $ManagedComponentsDir"
+}
+
+$ManagedComponentCount = @(Get-ChildItem $ManagedComponentsDir -Directory -ErrorAction SilentlyContinue).Count
+
+if ($ManagedComponentCount -eq 0) {
+    throw "managed_components exists but contains no components. Dependency resolution may have failed."
+}
+
+$EspSrDir = Join-Path $ManagedComponentsDir "espressif__esp-sr"
+if (-not (Test-Path $EspSrDir)) {
+    throw "Required ESP-SR component was not resolved: $EspSrDir"
+}
+
+Write-Host "ESP-IDF dependencies resolved successfully." -ForegroundColor Green
+Write-Host "  Managed components: $ManagedComponentCount"
+Write-Host "  ESP-SR: found"
+
+# ---------------------------------------------------------------------------
+# 7. Finish
+# ---------------------------------------------------------------------------
+Write-Host "`n[7/7] Setup verification..." -ForegroundColor Yellow
 
 Push-Location $XiaoZhiDir
 try {
@@ -269,6 +320,10 @@ Write-Host "  Target: $env:IDF_TARGET"
 Write-Host "`nUpstream commit:" -ForegroundColor Cyan
 Write-Host "  $Commit"
 
+Write-Host "`nDependencies:" -ForegroundColor Cyan
+Write-Host "  Resolved from main\idf_component.yml"
+Write-Host "  managed_components generated automatically"
+
 Write-Host "`nNext commands:" -ForegroundColor Cyan
 Write-Host "  cd `"$XiaoZhiDir`""
 Write-Host '  python scripts\build.py esp32s3-supermini'
@@ -276,3 +331,25 @@ Write-Host '  idf.py -p COM8 flash'
 Write-Host '  idf.py -p COM8 monitor'
 
 Write-Host "`nNote: COM8 may be different on another PC." -ForegroundColor DarkYellow
+
+
+Write-Host ""
+Write-Host "============================================================"
+Write-Host " CLEAN BUILD AND FLASH"
+Write-Host "============================================================"
+Write-Host ""
+Write-Host "After setup, use the following commands for a clean first flash:"
+Write-Host ""
+Write-Host "  cd xiaozhi-esp32"
+Write-Host "  python scripts\build.py esp32s3-supermini"
+Write-Host "  idf.py -p COM8 erase-flash"
+Write-Host "  idf.py -p COM8 flash"
+Write-Host "  idf.py -p COM8 monitor"
+Write-Host ""
+Write-Host "IMPORTANT:"
+Write-Host "  erase-flash erases the ENTIRE ESP32-S3 flash."
+Write-Host "  This is recommended for the first installation or when"
+Write-Host "  changing partition tables/assets."
+Write-Host "  Replace COM8 with the actual ESP32-S3 port."
+Write-Host ""
+
