@@ -42,4 +42,11 @@
 // Onboard RGB LED
 #define BUILTIN_LED_GPIO         GPIO_NUM_48
 
+// ============================================================
+// MQTT - Temporary development configuration
+// ============================================================
+
+#define MQTT_BROKER_URI "mqtt://broker.hivemq.com:1883"
+#define MQTT_LED_TOPIC  "xiaozhi/test/slave/led"
+
 #endif // _BOARD_CONFIG_H_

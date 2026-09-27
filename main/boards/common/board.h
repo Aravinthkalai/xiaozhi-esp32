@@ -63,7 +63,7 @@ public:
         static Board* instance = static_cast<Board*>(create_board());
         return *instance;
     }
-
+    virtual void OnNetworkConnected() {}
     virtual ~Board() = default;
     virtual std::string GetBoardType() = 0;
     virtual std::string GetUuid() { return uuid_; }

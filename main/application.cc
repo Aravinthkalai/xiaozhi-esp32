@@ -294,6 +294,11 @@ void Application::Run() {
 
 void Application::HandleNetworkConnectedEvent() {
     ESP_LOGI(TAG, "Network connected");
+
+    // Notify the board only after the network stack is ready.
+    // The SuperMini board uses this hook to start its separate MQTT client.
+    Board::GetInstance().OnNetworkConnected();
+
     auto state = GetDeviceState();
 
     if (state == kDeviceStateStarting || state == kDeviceStateWifiConfiguring) {
